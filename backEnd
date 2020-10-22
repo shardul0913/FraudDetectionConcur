@@ -1,0 +1,104 @@
+import plotly as px
+import plotly.graph_objects as go
+import plotly.express as pl
+from plotly.subplots import make_subplots
+import pandas as pd
+import numpy as np
+from sklearn import preprocessing
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.svm import OneClassSVM
+import matplotlib.pyplot as plt
+
+
+#################### read #######################
+
+
+dfOg = pd.read_excel('dataset.xlsx')
+dfOg.head()
+
+####################
+
+dfTime = dfOg
+dfTime['Stay'] = (dfTime['travel_end_date'] - dfTime['travel_start_date'])/pd.offsets.Day(1)
+
+dfTime = dfTime.set_index('travel_start_date')
+dfTime = dfTime.where(dfTime["sales_person_name"]=="Tom Dolan")
+
+dfplot = dfTime[['Stay','expense_num','total_expense','max_amount','air_fare','hotel','distance','car_rental','per_diem_based_on_rate']]
+dfAno = dfTime[['Stay','expense_num','total_expense','air_fare','hotel','car_rental','per_diem','per_diem_based_on_rate']]
+
+dfAno = dfAno.fillna(0)
+scaler = preprocessing.MinMaxScaler()
+dfAno = scaler.fit_transform(dfAno)
+model = OneClassSVM(nu=0.01, kernel="rbf", gamma=0.01)
+model.fit(dfAno)
+
+dfplot['anomalySVM'] = np.array(model.predict(dfAno))
+a = dfplot.loc[dfplot['anomalySVM'] == -1, ['travel_start_date','total_expense']]
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=dfTime.index, y=dfTime['total_expense'], name="Expenses",line_color='deepskyblue'))
+
+fig.add_trace(go.Scatter(x=a.index, y=a['total_expense'], mode='markers'))
+
+fig.update_layout(title_text='Expense : Tom Dolan',xaxis_rangeslider_visible=True)
+fig.show()
+
+
+#################################################################################################
+
+dfTime = dfOg
+dfTime['Stay'] = (dfTime['travel_end_date'] - dfTime['travel_start_date'])/pd.offsets.Day(1)
+
+dfTime = dfTime.set_index('travel_start_date')
+dfTime = dfTime.where(dfTime["sales_person_name"]=="Tom Dolan")
+
+dfplot = dfTime[['Stay','expense_num','total_expense','max_amount','air_fare','hotel','distance','car_rental','per_diem_based_on_rate']]
+
+dfAno = dfTime[['Stay','expense_num','total_expense','air_fare','hotel','car_rental','per_diem','per_diem_based_on_rate']]
+
+dfAno = dfAno.fillna(0)
+scaler = preprocessing.MinMaxScaler()
+dfAno = scaler.fit_transform(dfAno)
+model = OneClassSVM(nu=0.01, kernel="rbf", gamma=0.01)
+model.fit(dfAno)
+
+dfplot['anomalySVM'] = np.array(model.predict(dfAno))
+a = dfplot.loc[dfplot['anomalySVM'] == -1, ['travel_start_date','total_expense']]
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=dfTime.index, y=dfTime['total_expense'], name="Expenses",line_color='deepskyblue'))
+
+fig.add_trace(go.Scatter(x=a.index, y=a['total_expense'], mode='markers'))
+
+fig.update_layout(title_text='Expense : Tom Dolan',xaxis_rangeslider_visible=True)
+fig.show()
+
+
+
+n_alphas = 200
+alphas = np.logspace(-0.01, 5, n_alphas)
+
+coefs = []
+
+# np.squeeze(X_train, axis=(0,)).shape
+for a in alphas:
+    ridge = Ridge(alpha=a, fit_intercept=False)
+    ridge.fit(X_train, y_train)
+    coefs.append(ridge.coef_[0])
+
+plt.figure(num=None, figsize=(10, 10), dpi=80, facecolor='w', edgecolor='k')
+
+ax = plt.gca()
+
+ax.plot(alphas, coefs)
+ax.set_xscale('log')
+ax.set_xlim(ax.get_xlim()[::-1])  # reverse axis
+plt.xlabel('alpha')
+plt.ylabel('weights')
+plt.title('Ridge coefficients as a function of the regularization')
+plt.axis('tight')
+plt.show()

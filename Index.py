@@ -24,12 +24,13 @@ import pandas as pd
 import numpy as np
 from sklearn import preprocessing
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.svm import OneClassSVM
 import matplotlib.pyplot as plt
-
+from ApplySMOGEN import dataTrans
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -42,13 +43,19 @@ theme =  {
 
 app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-
 dfOg = pd.read_excel('dataset.xlsx')
-dfTime = dfOg
+
+df = dfOg[:1177] 
+dfTime = dfOg[:1177]
 dfTime['Stay'] = (dfTime['travel_end_date'] - dfTime['travel_start_date']) / pd.offsets.Day(1)
 
-dfTime = dfTime.set_index('travel_start_date')
+SmognData = dataTrans(dfOg[:800])
+SmognData = SmognData[['Stay', 'expense_num','air_fare', 'hotel', 'car_rental', 'per_diem',
+                        'per_diem_based_on_rate','total_expense']]
+scaler = preprocessing.MinMaxScaler()
+SmognData = scaler.fit_transform(SmognData)
 
+dfTime = dfTime.set_index('travel_start_date')
 
 dfExp = dfOg[
     ['max_amount', 'distance', 'expense_num', 'total_expense', 'air_fare', 'hotel', 'mileage', 'travel_start_date',
@@ -65,11 +72,19 @@ dfExp = dfExp.drop(
      'travel_end_date', 'per_diem_based_on_rate'], axis=1)
 dfExp.head()
 
-scaler = preprocessing.MinMaxScaler()
-
+scaler = MinMaxScaler()
 dfExp = scaler.fit_transform(dfExp)
 
+
+
 X_train, X_test, y_train, y_test = train_test_split(dfExp, yT, test_size=0.33, random_state=42)
+
+## based on the label value introduce more anomlous observations
+
+
+# xTrain = xTrain.join(y_train, lsuffix='_caller', rsuffix='_other')
+# print(xTrain)
+# print(y_train)
 
 clf = Ridge(alpha=1.0)
 clf.fit(X_train, y_train)
@@ -136,30 +151,33 @@ def graph_update(input_data):
 
     graphs = []
     for names in input_data:
+        
         dfTime1 = dfTime.where(dfTime["sales_person_name"] == str(names))
         dfplot = dfTime1[
             ['Stay', 'expense_num', 'total_expense', 'max_amount', 'air_fare', 'hotel', 'distance', 'car_rental',
              'per_diem_based_on_rate']]
-        dfAno = dfTime1[['Stay', 'expense_num', 'total_expense', 'air_fare', 'hotel', 'car_rental', 'per_diem',
-                        'per_diem_based_on_rate']]
-
+        dfAno = dfTime1[['Stay', 'expense_num','air_fare', 'hotel', 'car_rental', 'per_diem',
+                        'per_diem_based_on_rate','total_expense']]
+        
         dfAno = dfAno.fillna(0)
+        model = OneClassSVM(nu=0.01, kernel="rbf", gamma=0.05)
+        model.fit(SmognData)
+
         scaler = preprocessing.MinMaxScaler()
         dfAno = scaler.fit_transform(dfAno)
-        model = OneClassSVM(nu=0.01, kernel="rbf", gamma=0.01)
-        model.fit(dfAno)
-
+        
         dfplot['anomalySVM'] = np.array(model.predict(dfAno))
+        
         a = dfplot.loc[dfplot['anomalySVM'] == -1, ['travel_start_date', 'total_expense']]
-        dfOg['SVMout'] = np.array(model.predict(dfAno))
-
+        df['SVMout'] = np.array(model.predict(dfAno))
+        
         # fig = go.Figure()
         #
         # fig.add_trace(go.Scatter(x=dfTime.index, y=dfTime['total_expense'], name="Expenses", line_color='deepskyblue'))
         # fig.add_trace(go.Scatter(x=a.index, y=a['total_expense'], mode='markers'))
         # fig.update_layout(title_text='Expense : ' + input_data, xaxis_rangeslider_visible=True)
 
-        dfOg.to_excel('outputSVM.xlsx')
+        df.to_excel('outputSVM.xlsx')
         data = [go.Scatter(x=dfTime1.index, y=dfTime1['total_expense'], name="Expenses", line_color='deepskyblue'),
                         go.Scatter(x=a.index, y=a['total_expense'], mode='markers')]
         graphs.append(html.Div(dcc.Graph(id =names,
